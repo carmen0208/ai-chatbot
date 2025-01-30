@@ -1,9 +1,12 @@
 import {
+  type DataStreamWriter,
   type Message,
+  type StreamTextResult,
   createDataStreamResponse,
   smoothStream,
   streamText,
 } from 'ai';
+import { z } from 'zod';
 
 import { auth } from '@/app/(auth)/auth';
 import { customModel } from '@/lib/ai';
@@ -22,29 +25,23 @@ import {
 } from '@/lib/utils';
 
 import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
 
 export const maxDuration = 60;
 
 type AllowedTools =
-  | 'createDocument'
-  | 'updateDocument'
-  | 'requestSuggestions'
-  | 'getWeather';
+  | 'getWalletAddress'
+  | 'createEvmWallet'
 
-const blocksTools: AllowedTools[] = [
-  'createDocument',
-  'updateDocument',
-  'requestSuggestions',
+const tradingTools: AllowedTools[] = [
+  'getWalletAddress',
+  'createEvmWallet'
 ];
 
-const weatherTools: AllowedTools[] = ['getWeather'];
-const allTools: AllowedTools[] = [...blocksTools, ...weatherTools];
+// const weatherTools: AllowedTools[] = ['getWeather'];
 
-export async function POST(request: Request) {
+const allTools: AllowedTools[] = [...tradingTools, ];
+
+export async function POST(request: Request): Promise<Response> {
   const {
     id,
     messages,
@@ -80,26 +77,42 @@ export async function POST(request: Request) {
   await saveMessages({
     messages: [{ ...userMessage, createdAt: new Date(), chatId: id }],
   });
+  const userMessageId = generateUUID();
 
   return createDataStreamResponse({
-    execute: (dataStream) => {
-      const result = streamText({
+    execute: (dataStream: DataStreamWriter) => {
+      dataStream.writeData({
+        type: 'user-message-id',
+        content: userMessageId,
+      });
+
+      const result: StreamTextResult<any> = streamText({
         model: customModel(model.apiIdentifier),
         system: systemPrompt,
         messages,
         maxSteps: 5,
         experimental_activeTools: allTools,
-        experimental_transform: smoothStream({ chunking: 'word' }),
-        experimental_generateMessageId: generateUUID,
         tools: {
-          getWeather,
-          createDocument: createDocument({ session, dataStream, model }),
-          updateDocument: updateDocument({ session, dataStream, model }),
-          requestSuggestions: requestSuggestions({
-            session,
-            dataStream,
-            model,
-          }),
+          getWalletAddress: {
+            description: 'Get the current wallet for the trader',
+            parameters: z.object({
+            }),
+            execute: async () => {
+              return Promise.resolve({
+                content: 'No wallet address found, you should create a wallet first.',
+              });
+            },
+          },
+          createEvmWallet: {
+            description:
+              'Create a EVM wallet for trading',
+            parameters: z.object({}),
+            execute: async () => {
+              return Promise.resolve({
+                content: 'Yes, I created an EVM wallet for you, it is 0x1234567890',
+              });
+            },
+          }
         },
         onFinish: async ({ response }) => {
           if (session.user?.id) {
@@ -130,7 +143,7 @@ export async function POST(request: Request) {
           functionId: 'stream-text',
         },
       });
-
+      console.log("carmen:chat:api:chat:finish", {userMessageId, result, dataStream})
       result.mergeIntoDataStream(dataStream);
     },
   });

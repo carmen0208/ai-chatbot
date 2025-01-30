@@ -12,7 +12,7 @@ import { fetcher, generateUUID } from '@/lib/utils';
 import { Block } from './block';
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
-import { VisibilityType } from './visibility-selector';
+import type { VisibilityType } from './visibility-selector';
 import { useBlockSelector } from '@/hooks/use-block';
 
 export function Chat({
@@ -29,7 +29,7 @@ export function Chat({
   isReadonly: boolean;
 }) {
   const { mutate } = useSWRConfig();
-
+  console.log("carmen:Chat", {id, initialMessages, selectedModelId, selectedVisibilityType, isReadonly})
   const {
     messages,
     setMessages,
@@ -51,6 +51,15 @@ export function Chat({
       mutate('/api/history');
     },
   });
+  console.log("carmen:Chat:finish api history", {messages,
+    setMessages,
+    handleSubmit,
+    input,
+    setInput,
+    append,
+    isLoading,
+    stop,
+    reload,})
 
   const { data: votes } = useSWR<Array<Vote>>(
     `/api/vote?chatId=${id}`,
